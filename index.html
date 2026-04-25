@@ -388,35 +388,31 @@ function saveKaellDB(){
   db.ref('kaell').set(kaell);
 }
 
-function todayKey(){var d=new Date();return d.getDate()+'.'+(d.getMonth()+1)+'.'+d.getFullYear();}
-function dateKey(ts){var d=new Date(ts);return d.getDate()+'.'+(d.getMonth()+1)+'.'+d.getFullYear();}
+function todayKey(){var d=new Date();return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();}
+function dateKey(ts){var d=new Date(ts);return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();}
 function mKey(ts){var d=new Date(ts);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
 function mLabel(k){var p=k.split('-');var mn=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];return mn[+p[1]-1]+' '+p[0];}
 function winner(i,g){if(i>g)return{e:'👑',n:'Илья',c:'mi'};if(g>i)return{e:'👑',n:'Габриела',c:'mg'};return{e:'🤝',n:'Ничья',c:'mt'};}
+function kaelDayLabel(dk){var p=dk.split('-');var obj=new Date(p[0],p[1]-1,p[2]);return obj.toLocaleDateString('ru-RU',{weekday:'short',day:'numeric',month:'short'});}
 
-// Kaell — накапливает часы за день
+// Kaell — накапливает часы, на главной всегда 0 после сохранения
 function saveKaell2(){
   var iv=parseFloat(document.getElementById('ki').value)||0;
   var gv=parseFloat(document.getElementById('kg').value)||0;
   if(!iv&&!gv){showToast('✏️ Введи хотя бы одно значение!');return;}
   var dk=todayKey();
   var existing=kaell[dk]||{i:0,g:0};
-  // накапливаем — добавляем к уже существующим часам
   kaell[dk]={i:Math.round((existing.i+iv)*10)/10, g:Math.round((existing.g+gv)*10)/10};
-  saveKaellDB();
+  db.ref('kaell/'+dk).set(kaell[dk]);
+  // сбрасываем поля в 0
   document.getElementById('ki').value='';
   document.getElementById('kg').value='';
-  updKaell();
-  showToast('👶 Добавлено: Илья +'+iv+'ч, Габриела +'+gv+'ч');
+  showToast('👶 Сохранено: Илья +'+iv+'ч, Габриела +'+gv+'ч');
 }
 function updKaell(){
-  // сегодня
-  var d=kaell[todayKey()]||{i:0,g:0};
+  // главный экран всегда показывает 0 (поля пустые)
   var el=document.getElementById('kdisp');
-  if(!d.i&&!d.g){el.innerHTML='';return;}
-  el.innerHTML='<div class="kpill ki"><span>👨 Илья сегодня</span><span>'+d.i+'ч</span></div><div class="kpill kg"><span>👩 Габриела сегодня</span><span>'+d.g+'ч</span></div>';
-  // обновляем вкладку Kael
-  renderKaelTab();
+  el.innerHTML='';
 }
 function getTotalKaell(){
   var ti=0,tg=0;
@@ -427,25 +423,18 @@ function renderKaelTab(){
   var cont=document.getElementById('kael-cont');
   if(!cont)return;
   var tot=getTotalKaell();
-  // итого
   var html='<div class="kael-totals">';
   html+='<div class="kael-total-card ki"><div class="kael-total-name">👨 Илья</div><div class="kael-total-hrs">'+tot.i+'<span>ч</span></div><div class="kael-total-sub">всего с Kael</div></div>';
   html+='<div class="kael-total-card kg"><div class="kael-total-name">👩 Габриела</div><div class="kael-total-hrs">'+tot.g+'<span>ч</span></div><div class="kael-total-sub">всего с Kael</div></div>';
   html+='</div>';
-  // история по дням
-  var days=Object.keys(kaell).sort(function(a,b){
-    var pa=a.split('.'),pb=b.split('.');
-    var da=new Date(pa[2],pa[1]-1,pa[0]);
-    var db2=new Date(pb[2],pb[1]-1,pb[0]);
-    return db2-da;
-  });
+  var days=Object.keys(kaell).sort(function(a,b){return b>a?1:-1;});
   if(!days.length){html+='<div class="empty"><div class="eicon">👶</div><p>Пока нет данных.<br>Добавь время с Kael!</p></div>';cont.innerHTML=html;return;}
   html+='<div class="sh" style="margin-top:16px">По дням</div>';
   days.forEach(function(dk){
     var v=kaell[dk]||{i:0,g:0};
-    var parts=dk.split('.');
-    var dateObj=new Date(parts[2],parts[1]-1,parts[0]);
-    var lbl=dateObj.toLocaleDateString('ru-RU',{weekday:'short',day:'numeric',month:'short'});
+    var p=dk.split('-');
+    var obj=new Date(p[0],p[1]-1,p[2]);
+    var lbl=obj.toLocaleDateString('ru-RU',{weekday:'short',day:'numeric',month:'short'});
     html+='<div class="kael-day-row">';
     html+='<div class="kael-day-lbl">'+lbl+'</div>';
     html+='<div class="kael-day-vals">';
