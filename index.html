@@ -146,6 +146,22 @@ header p{font-size:0.65rem;color:var(--muted);margin-top:5px;}
 .empty{text-align:center;padding:40px 20px;color:var(–muted);}
 .eicon{font-size:2.5rem;margin-bottom:10px;}
 .empty p{font-size:0.8rem;line-height:1.6;}
+
+/* KAEL TAB */
+.kael-totals{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;}
+.kael-total-card{background:var(–card);border-radius:16px;padding:16px 12px;text-align:center;border:1.5px solid rgba(6,214,160,0.3);}
+.kael-total-name{font-size:0.65rem;font-weight:700;color:var(–muted);margin-bottom:6px;}
+.kael-total-hrs{font-family:‘Unbounded’,sans-serif;font-size:2rem;font-weight:900;color:var(–kaell);line-height:1;}
+.kael-total-hrs span{font-size:1rem;}
+.kael-total-sub{font-size:0.58rem;color:var(–muted);margin-top:4px;}
+.kael-day-row{background:var(–card);border-radius:12px;padding:10px 12px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;}
+.kael-day-lbl{font-size:0.75rem;color:var(–muted);font-weight:600;}
+.kael-day-vals{display:flex;align-items:center;gap:8px;}
+.kael-day-val{font-size:0.7rem;font-weight:700;padding:3px 8px;border-radius:8px;}
+.kael-day-val.ki{background:rgba(79,110,247,0.15);color:#8faaf9;}
+.kael-day-val.kg{background:rgba(247,79,158,0.15);color:#f99ec8;}
+.kael-day-del{background:none;border:none;color:var(–muted);cursor:pointer;font-size:0.8rem;padding:2px 4px;border-radius:6px;}
+.kael-day-del:hover{color:#ff5555;}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(100px);background:var(–card2);border:1px solid var(–border);padding:10px 20px;border-radius:30px;font-size:0.8rem;font-weight:600;transition:transform 0.3s;z-index:999;white-space:nowrap;}
 .toast.show{transform:translateX(-50%) translateY(0);}
 </style>
@@ -200,6 +216,7 @@ header p{font-size:0.65rem;color:var(--muted);margin-top:5px;}
   <div class="tab" onclick="setTab('log')">📋 История</div>
   <div class="tab" onclick="setTab('stats')">🏆 Счёт</div>
   <div class="tab" onclick="setTab('monthly')">📅 Месяцы</div>
+  <div class="tab" onclick="setTab('kael')">👶 Kael</div>
 </div>
 
 <!-- ADD -->
@@ -290,6 +307,15 @@ header p{font-size:0.65rem;color:var(--muted);margin-top:5px;}
   </div>
 </div>
 
+<!-- KAEL -->
+
+<div id="pane-kael" style="display:none">
+  <div class="sec">
+    <div class="sh">👶 Время с Kael</div>
+    <div id="kael-cont"></div>
+  </div>
+</div>
+
 <!-- IMAGE MODAL -->
 
 <div class="modal-overlay" id="modal" onclick="closeModal()">
@@ -350,6 +376,7 @@ db.ref('tasks').on('value', function(snap){
 db.ref('kaell').on('value', function(snap){
   kaell = snap.val() || {};
   updateAll();
+  renderKaelTab();
 });
 
 function saveTasks(){
@@ -367,22 +394,73 @@ function mKey(ts){var d=new Date(ts);return d.getFullYear()+'-'+String(d.getMont
 function mLabel(k){var p=k.split('-');var mn=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];return mn[+p[1]-1]+' '+p[0];}
 function winner(i,g){if(i>g)return{e:'👑',n:'Илья',c:'mi'};if(g>i)return{e:'👑',n:'Габриела',c:'mg'};return{e:'🤝',n:'Ничья',c:'mt'};}
 
-// Kaell
+// Kaell — накапливает часы за день
 function saveKaell2(){
   var iv=parseFloat(document.getElementById('ki').value)||0;
   var gv=parseFloat(document.getElementById('kg').value)||0;
-  kaell[todayKey()]={i:iv,g:gv};
+  if(!iv&&!gv){showToast('✏️ Введи хотя бы одно значение!');return;}
+  var dk=todayKey();
+  var existing=kaell[dk]||{i:0,g:0};
+  // накапливаем — добавляем к уже существующим часам
+  kaell[dk]={i:Math.round((existing.i+iv)*10)/10, g:Math.round((existing.g+gv)*10)/10};
   saveKaellDB();
   document.getElementById('ki').value='';
   document.getElementById('kg').value='';
   updKaell();
-  showToast('👶 Сохранено: Илья '+iv+'ч, Габриела '+gv+'ч');
+  showToast('👶 Добавлено: Илья +'+iv+'ч, Габриела +'+gv+'ч');
 }
 function updKaell(){
+  // сегодня
   var d=kaell[todayKey()]||{i:0,g:0};
   var el=document.getElementById('kdisp');
   if(!d.i&&!d.g){el.innerHTML='';return;}
-  el.innerHTML='<div class="kpill ki"><span>👨 Илья</span><span>'+d.i+'ч</span></div><div class="kpill kg"><span>👩 Габриела</span><span>'+d.g+'ч</span></div>';
+  el.innerHTML='<div class="kpill ki"><span>👨 Илья сегодня</span><span>'+d.i+'ч</span></div><div class="kpill kg"><span>👩 Габриела сегодня</span><span>'+d.g+'ч</span></div>';
+  // обновляем вкладку Kael
+  renderKaelTab();
+}
+function getTotalKaell(){
+  var ti=0,tg=0;
+  Object.values(kaell).forEach(function(v){ti+=v.i||0;tg+=v.g||0;});
+  return{i:Math.round(ti*10)/10, g:Math.round(tg*10)/10};
+}
+function renderKaelTab(){
+  var cont=document.getElementById('kael-cont');
+  if(!cont)return;
+  var tot=getTotalKaell();
+  // итого
+  var html='<div class="kael-totals">';
+  html+='<div class="kael-total-card ki"><div class="kael-total-name">👨 Илья</div><div class="kael-total-hrs">'+tot.i+'<span>ч</span></div><div class="kael-total-sub">всего с Kael</div></div>';
+  html+='<div class="kael-total-card kg"><div class="kael-total-name">👩 Габриела</div><div class="kael-total-hrs">'+tot.g+'<span>ч</span></div><div class="kael-total-sub">всего с Kael</div></div>';
+  html+='</div>';
+  // история по дням
+  var days=Object.keys(kaell).sort(function(a,b){
+    var pa=a.split('.'),pb=b.split('.');
+    var da=new Date(pa[2],pa[1]-1,pa[0]);
+    var db2=new Date(pb[2],pb[1]-1,pb[0]);
+    return db2-da;
+  });
+  if(!days.length){html+='<div class="empty"><div class="eicon">👶</div><p>Пока нет данных.<br>Добавь время с Kael!</p></div>';cont.innerHTML=html;return;}
+  html+='<div class="sh" style="margin-top:16px">По дням</div>';
+  days.forEach(function(dk){
+    var v=kaell[dk]||{i:0,g:0};
+    var parts=dk.split('.');
+    var dateObj=new Date(parts[2],parts[1]-1,parts[0]);
+    var lbl=dateObj.toLocaleDateString('ru-RU',{weekday:'short',day:'numeric',month:'short'});
+    html+='<div class="kael-day-row">';
+    html+='<div class="kael-day-lbl">'+lbl+'</div>';
+    html+='<div class="kael-day-vals">';
+    html+='<div class="kael-day-val ki">И: '+v.i+'ч</div>';
+    html+='<div class="kael-day-val kg">Г: '+v.g+'ч</div>';
+    html+='<button class="kael-day-del" onclick="delKaellDay(\''+dk+'\')">✕</button>';
+    html+='</div></div>';
+  });
+  cont.innerHTML=html;
+}
+function delKaellDay(dk){
+  delete kaell[dk];
+  saveKaellDB();
+  renderKaelTab();
+  showToast('🗑️ День удалён');
 }
 document.querySelector('.ksave').onclick=saveKaell2;
 
@@ -577,7 +655,17 @@ function exportExcel(){
   XLSX.utils.book_append_sheet(wb,ws1,'Все дела');
 
   var r2=[['Дата','Илья (часы)','Габриела (часы)','Итого (часы)']];
-  Object.keys(kaell).sort().forEach(function(d){var v=kaell[d];r2.push([d,v.i||0,v.g||0,(v.i||0)+(v.g||0)]);});
+  var kTotI=0, kTotG=0;
+  Object.keys(kaell).sort(function(a,b){
+    var pa=a.split('.'),pb=b.split('.');
+    return new Date(pa[2],pa[1]-1,pa[0])-new Date(pb[2],pb[1]-1,pb[0]);
+  }).forEach(function(d){
+    var v=kaell[d];
+    var di=v.i||0, dg=v.g||0;
+    kTotI+=di; kTotG+=dg;
+    r2.push([d, di, dg, Math.round((di+dg)*10)/10]);
+  });
+  r2.push(['ИТОГО', Math.round(kTotI*10)/10, Math.round(kTotG*10)/10, Math.round((kTotI+kTotG)*10)/10]);
   var ws2=XLSX.utils.aoa_to_sheet(r2);
   ws2['!cols']=[{wch:14},{wch:14},{wch:16},{wch:14}];
   XLSX.utils.book_append_sheet(wb,ws2,'Время с Kael');
@@ -604,12 +692,13 @@ function exportExcel(){
 }
 
 function setTab(t){
-  ['add','log','stats','monthly'].forEach(function(tab){
+  ['add','log','stats','monthly','kael'].forEach(function(tab){
     document.getElementById('pane-'+tab).style.display=tab===t?'block':'none';
   });
   document.querySelectorAll('.tab').forEach(function(el,i){
-    el.classList.toggle('active',['add','log','stats','monthly'][i]===t);
+    el.classList.toggle('active',['add','log','stats','monthly','kael'][i]===t);
   });
+  if(t==='kael')renderKaelTab();
 }
 
 function showToast(msg){
