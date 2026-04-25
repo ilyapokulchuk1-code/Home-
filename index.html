@@ -7,6 +7,8 @@
 <title>🏠 Илья & Габриела — Домашние дела</title>
 <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;700;900&family=Manrope:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <style>
 :root {
   --ilya:#4F6EF7; --gab:#F74F9E; --kaell:#06D6A0;
@@ -298,6 +300,27 @@ header p{font-size:0.65rem;color:var(--muted);margin-top:5px;}
 <div class="toast" id="toast"></div>
 
 <script>
+// Firebase config
+var firebaseConfig = {
+  apiKey: "AIzaSyDJE9MG-r40CJ67M0__t2waLy3G5ps_A68",
+  authDomain: "home-tracker-a3833.firebaseapp.com",
+  databaseURL: "https://home-tracker-a3833-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "home-tracker-a3833",
+  storageBucket: "home-tracker-a3833.firebasestorage.app",
+  messagingSenderId: "1004089159522",
+  appId: "1:1004089159522:web:c6b3db639be4bce576c63b",
+  measurementId: "G-0NQV4L2C4H"
+};
+firebase.initializeApp(firebaseConfig);
+var db = firebase.database();
+
+// Sync indicator
+var syncEl = document.createElement('div');
+syncEl.style.cssText = 'position:fixed;top:8px;right:12px;font-size:0.6rem;color:#06D6A0;font-weight:700;z-index:9999;font-family:Unbounded,sans-serif;';
+syncEl.textContent = '🔴 ...';
+document.body.appendChild(syncEl);
+function setSyncStatus(ok){ syncEl.textContent = ok ? '🟢 онлайн' : '🔴 офлайн'; }
+
 var TK='ht_tasks_v4', KK='ht_kaell_v1';
 var SUGG=[
   'Приготовил(а) завтрак','Приготовил(а) обед','Приготовил(а) ужин',
@@ -315,11 +338,28 @@ var SUGG=[
 ];
 
 var tasks=[], kaell={}, curP='i', sugIdx=-1, pendingPhoto=null;
-try{tasks=JSON.parse(localStorage.getItem(TK)||'[]');}catch(e){tasks=[];}
-try{kaell=JSON.parse(localStorage.getItem(KK)||'{}');}catch(e){kaell={};}
 
-function saveTasks(){try{localStorage.setItem(TK,JSON.stringify(tasks));}catch(e){}}
-function saveKaell(){try{localStorage.setItem(KK,JSON.stringify(kaell));}catch(e){}}
+// Firebase realtime sync
+db.ref('tasks').on('value', function(snap){
+  tasks = snap.val() ? Object.values(snap.val()) : [];
+  tasks.sort(function(a,b){return b.ts-a.ts;});
+  setSyncStatus(true);
+  updateAll();
+}, function(){ setSyncStatus(false); });
+
+db.ref('kaell').on('value', function(snap){
+  kaell = snap.val() || {};
+  updateAll();
+});
+
+function saveTasks(){
+  var obj={};
+  tasks.forEach(function(t){ obj['t'+t.id]=t; });
+  db.ref('tasks').set(obj);
+}
+function saveKaellDB(){
+  db.ref('kaell').set(kaell);
+}
 
 function todayKey(){var d=new Date();return d.getDate()+'.'+(d.getMonth()+1)+'.'+d.getFullYear();}
 function dateKey(ts){var d=new Date(ts);return d.getDate()+'.'+(d.getMonth()+1)+'.'+d.getFullYear();}
@@ -332,7 +372,7 @@ function saveKaell2(){
   var iv=parseFloat(document.getElementById('ki').value)||0;
   var gv=parseFloat(document.getElementById('kg').value)||0;
   kaell[todayKey()]={i:iv,g:gv};
-  saveKaell();
+  saveKaellDB();
   document.getElementById('ki').value='';
   document.getElementById('kg').value='';
   updKaell();
